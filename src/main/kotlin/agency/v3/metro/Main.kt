@@ -17,7 +17,12 @@ fun main(args: Array<String>){
 
     val result = Metro(schema).allStationsWithin(
             //93 = Kitay-Gorod, Orange
-            Availability(targetStationId = "93", maxTime = 300, timeUnit = TimeUnit.SECONDS)
+            Availability(
+                    targetStationId = "93",
+                    maxTravelTime = 480,
+                    timeUnit = TimeUnit.SECONDS,
+                    maxTransfers = 0
+            )
     )
 
 

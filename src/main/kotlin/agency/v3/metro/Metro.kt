@@ -3,6 +3,10 @@ package agency.v3.metro
 import com.beust.klaxon.JsonObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * Moscow metro utilities
+ * @param schema valid Moscow Metro schema, as provided by Yandex Metro
+ * */
 class Metro(schema: JsonObject) {
 
     private val stations: JsonObject = schema["stations"] as JsonObject
@@ -11,14 +15,17 @@ class Metro(schema: JsonObject) {
 
     /**
      * Gathers all stations that are within given availability: e.g. max travel time, max transfer count, target station
+     * @param availability specifier for availability estimation
      * @return set of stations that are within required availability relative to target station
      * */
     fun allStationsWithin(availability: Availability): Set<Station> {
         return processStation(
                 station = stationWith(availability.targetStationId),
                 prevStation = null,
-                accumulatedTime = 0,
-                maxTimeSeconds = availability.timeUnit.toSeconds(availability.maxTime).toInt()
+                currentTravelTime = 0,
+                currentCommittedTransfers = 0,
+                maxTimeSeconds = availability.timeUnit.toSeconds(availability.maxTravelTime).toInt(),
+                maxTransfers = availability.maxTransfers ?: -1
         )
     }
 
@@ -26,7 +33,13 @@ class Metro(schema: JsonObject) {
      * Recursion. Processes all outgoing links from current station, as long as the link weight is within a given budget (time / transfer count)
      * @return set of stations that are within required budget relative to target station
      * */
-    private fun processStation(station: Station, prevStation: Station?, accumulatedTime: Int, maxTimeSeconds: Int, maxTransfers: Int = -1): Set<Station> {
+    private fun processStation(
+            station: Station,
+            prevStation: Station?,
+            currentTravelTime: Int,
+            currentCommittedTransfers: Int,
+            maxTimeSeconds: Int,
+            maxTransfers: Int): Set<Station> {
 
         val links = station.links
 
@@ -45,18 +58,18 @@ class Metro(schema: JsonObject) {
 
 
             val weight = link.weightTime
+            val transfer = link.weightTransfer //0 for links, 1 for transfers
 
 
-            val addedTime = accumulatedTime + weight
+            val travelTime = currentTravelTime + weight //for link
+            val committedTransfers = currentCommittedTransfers + transfer //for link
 
 
-
-            if (addedTime <= maxTimeSeconds) {
+            if (travelTime <= maxTimeSeconds && committedTransfers <= maxTransfers) {
+                //link is within travel budget, process
                 val next = stationWith(nextStationId)
-                val stationsSet = processStation(next, station, addedTime, maxTimeSeconds, maxTransfers)
-                results.addAll(
-                        stationsSet /*+ station*/
-                )
+                val stationsSet = processStation(next, station, travelTime, committedTransfers, maxTimeSeconds, maxTransfers)
+                results.addAll(stationsSet)
             }
         }
 
@@ -120,10 +133,15 @@ data class Station(val id: String, val name: String, val color: String, @Transie
 
 /**
  * Query parameters defining travel budget (time and transfer count) for metro routes leading to target station
+ * @property targetStationId station against which availability is estimated
+ * @property maxTravelTime maximum time enroute to target station
+ * @property timeUnit of maxTravelTime
+ * @property maxTransfers maximum transfers enroute to target station; not limited by default
+ *
  * */
 data class Availability(
         val targetStationId: String,
-        val maxTime: Long,
+        val maxTravelTime: Long,
         val timeUnit: TimeUnit,
         val maxTransfers: Int? = null
 )
